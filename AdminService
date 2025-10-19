@@ -1,0 +1,29 @@
+package com.example.adsub.service;
+
+import com.example.adsub.entity.*;
+import com.example.adsub.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class AdminService {
+    private final SubscriptionRepository subscriptionRepo;
+
+    public List<Subscription> getPendingSubscriptions() {
+        return subscriptionRepo.findByStatus("PENDING");
+    }
+
+    public void approveSubscription(Long id) {
+        Subscription sub = subscriptionRepo.findById(id).orElseThrow();
+        sub.setStatus("APPROVED");
+        subscriptionRepo.save(sub);
+    }
+
+    public void rejectSubscription(Long id) {
+        Subscription sub = subscriptionRepo.findById(id).orElseThrow();
+        sub.setStatus("REJECTED");
+        subscriptionRepo.save(sub);
+    }
+}
