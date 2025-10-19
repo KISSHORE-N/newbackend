@@ -1,0 +1,18 @@
+@Entity
+@Table(name = "subscriptions")
+public class Subscription {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "subscriber_id")
+    private Subscriber subscriber;
+
+    @ManyToOne
+    @JoinColumn(name = "ad_group_id")
+    private AdGroup adGroup;
+
+    @Column(nullable = false)
+    private String status = "PENDING"; // PENDING / APPROVED / REJECTED
+}
