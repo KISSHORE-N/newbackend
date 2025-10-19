@@ -1,0 +1,10 @@
+package com.example.adsub.repository;
+
+import com.example.adsub.entity.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
+    List<Subscription> findBySubscriber(Subscriber subscriber);
+    List<Subscription> findByStatus(String status);
+}
