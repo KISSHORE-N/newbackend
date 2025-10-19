@@ -1,0 +1,31 @@
+package com.example.adsub.controller;
+
+import com.example.adsub.entity.Subscription;
+import com.example.adsub.service.AdminService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/admin")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:3000")
+public class AdminController {
+
+    private final AdminService adminService;
+
+    @GetMapping("/pending-subscriptions")
+    public List<Subscription> getPending() {
+        return adminService.getPendingSubscriptions();
+    }
+
+    @PostMapping("/approve/{id}")
+    public void approve(@PathVariable Long id) {
+        adminService.approveSubscription(id);
+    }
+
+    @PostMapping("/reject/{id}")
+    public void reject(@PathVariable Long id) {
+        adminService.rejectSubscription(id);
+    }
+}
