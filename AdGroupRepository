@@ -1,0 +1,6 @@
+package com.example.adsub.repository;
+
+import com.example.adsub.entity.AdGroup;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AdGroupRepository extends JpaRepository<AdGroup, Long> { }
