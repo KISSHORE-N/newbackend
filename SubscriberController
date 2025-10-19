@@ -1,0 +1,26 @@
+package com.example.adsub.controller;
+
+import com.example.adsub.dto.SubscriptionDTO;
+import com.example.adsub.service.SubscriberService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/subscriber")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:3000")
+public class SubscriberController {
+
+    private final SubscriberService subscriberService;
+
+    @GetMapping("/{id}/subscriptions")
+    public List<SubscriptionDTO> getSubscriptions(@PathVariable Long id) {
+        return subscriberService.getSubscriptions(id);
+    }
+
+    @PostMapping("/{subscriberId}/subscribe/{adGroupId}")
+    public void requestSubscription(@PathVariable Long subscriberId, @PathVariable Long adGroupId) {
+        subscriberService.requestSubscription(subscriberId, adGroupId);
+    }
+}
