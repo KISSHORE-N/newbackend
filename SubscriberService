@@ -1,0 +1,37 @@
+package com.example.adsub.service;
+
+import com.example.adsub.dto.SubscriptionDTO;
+import com.example.adsub.entity.*;
+import com.example.adsub.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class SubscriberService {
+    private final SubscriberRepository subscriberRepo;
+    private final AdGroupRepository adGroupRepo;
+    private final SubscriptionRepository subscriptionRepo;
+
+    public List<SubscriptionDTO> getSubscriptions(Long subscriberId) {
+        Subscriber s = subscriberRepo.findById(subscriberId).orElseThrow();
+        return subscriptionRepo.findBySubscriber(s).stream()
+                .map(sub -> new SubscriptionDTO(sub.getId(),
+                        sub.getAdGroup().getGroupName(),
+                        sub.getStatus()))
+                .collect(Collectors.toList());
+    }
+
+    public void requestSubscription(Long subscriberId, Long adGroupId) {
+        Subscriber s = subscriberRepo.findById(subscriberId).orElseThrow();
+        AdGroup a = adGroupRepo.findById(adGroupId).orElseThrow();
+
+        Subscription sub = new Subscription();
+        sub.setSubscriber(s);
+        sub.setAdGroup(a);
+        sub.setStatus("PENDING");
+        subscriptionRepo.save(sub);
+    }
+}
