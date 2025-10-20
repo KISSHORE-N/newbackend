@@ -1,0 +1,34 @@
+const handleRegister = async (e) => {
+  e.preventDefault();
+
+  if (!username || !password) {
+    setError("Please fill in all fields");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:8080/api/subscribers/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      }),
+    });
+
+    if (response.ok) {
+      setSuccess("Registered successfully! Redirecting to login...");
+      setError("");
+      setTimeout(() => navigate("/login"), 1500);
+    } else if (response.status === 409) {
+      setError("Username already exists");
+    } else {
+      setError("Registration failed");
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    setError("Server not reachable");
+  }
+};
