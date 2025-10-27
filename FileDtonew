@@ -1,0 +1,15 @@
+package com.scb.rwtoolbackend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class FileDto {
+    private Long id;
+    private String rname;       // display name
+    private String description; // optional
+    private String date;        // ISO yyyy-MM-dd
+    private String status;      // e.g., Processed/Pending
+    private String url;         // download URL
+}
