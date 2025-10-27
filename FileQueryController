@@ -1,0 +1,86 @@
+package com.scb.rwtoolbackend.controller;
+
+import com.scb.rwtoolbackend.dto.FileDto;
+import com.scb.rwtoolbackend.model.ComplianceFile;
+import com.scb.rwtoolbackend.model.FinanceFile;
+import com.scb.rwtoolbackend.model.OpsFile;
+import com.scb.rwtoolbackend.repository.ComplianceFileRepository;
+import com.scb.rwtoolbackend.repository.FinanceFileRepository;
+import com.scb.rwtoolbackend.repository.OpsFileRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/files")
+@RequiredArgsConstructor
+public class FileQueryController {
+
+    private final OpsFileRepository opsRepo;
+    private final ComplianceFileRepository complianceRepo;
+    private final FinanceFileRepository financeRepo;
+
+    private static final DateTimeFormatter DF = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    @GetMapping("/group/{groupName}")
+    public ResponseEntity<?> getFilesByGroup(@PathVariable String groupName) {
+        switch (groupName.toLowerCase()) {
+            case "ops_reports":
+            case "ops":
+                return ResponseEntity.ok(mapOps(opsRepo.findAll()));
+            case "compliance_data":
+            case "compliance":
+                return ResponseEntity.ok(mapCompliance(complianceRepo.findAll()));
+            case "finance_reports":
+            case "finance":
+                return ResponseEntity.ok(mapFinance(financeRepo.findAll()));
+            default:
+                return ResponseEntity.badRequest().body(
+                        java.util.Map.of("error", "Invalid group name: " + groupName));
+        }
+    }
+
+    private List<FileDto> mapOps(List<OpsFile> list) {
+        return list.stream().map(f ->
+                new FileDto(
+                        f.getId(),
+                        safe(f.getFileName()),
+                        safe(f.getDescription()),                         // if null -> ""
+                        f.getUploadDate() != null ? f.getUploadDate().format(DF) : "",
+                        "Processed",
+                        "/api/files/download/ops/" + f.getId()            // your existing download endpoint
+                )
+        ).toList();
+    }
+
+    private List<FileDto> mapCompliance(List<ComplianceFile> list) {
+        return list.stream().map(f ->
+                new FileDto(
+                        f.getId(),
+                        safe(f.getFileName()),
+                        safe(f.getDescription()),
+                        f.getUploadDate() != null ? f.getUploadDate().format(DF) : "",
+                        "Processed",
+                        "/api/files/download/compliance/" + f.getId()
+                )
+        ).toList();
+    }
+
+    private List<FileDto> mapFinance(List<FinanceFile> list) {
+        return list.stream().map(f ->
+                new FileDto(
+                        f.getId(),
+                        safe(f.getFileName()),
+                        safe(f.getDescription()),
+                        f.getUploadDate() != null ? f.getUploadDate().format(DF) : "",
+                        "Processed",
+                        "/api/files/download/finance/" + f.getId()
+                )
+        ).toList();
+    }
+
+    private String safe(String s) { return s == null ? "" : s; }
+}
