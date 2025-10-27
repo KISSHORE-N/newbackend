@@ -2,11 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import '../CommonStyles.css';
 
-// Base URL for your Spring Boot backend
 const API_BASE_URL = "http://localhost:8080/api/subscriptions";
-const FILE_BASE_URL = "http://localhost:8080/api/files"; // newly added
+const FILE_BASE_URL = "http://localhost:8080/api/files";
 
-// --- Icon Components ---
 const SearchIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
 );
@@ -14,7 +12,6 @@ const SendIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 17 2 13 22 2"></polygon></svg>
 );
 
-// --- Static Notifications for Demo ---
 export const initialNotifications = [
   { report: "Ops_Reports", message: "New operations report uploaded." },
   { report: "Finance_Reports", message: "Monthly finance report available." },
@@ -22,8 +19,8 @@ export const initialNotifications = [
 ];
 
 function SubscriberDashboard() {
-
   const { showNotifications, toggleNotifications, user, CloseIcon, NotificationIcon } = useOutletContext();
+
   const [allGroups, setAllGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTable, setActiveTable] = useState('subscribed');
@@ -31,24 +28,19 @@ function SubscriberDashboard() {
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
 
-  // --- Fetch Subscribed Groups ---
   const fetchGroups = async () => {
-    if (!user || !user.username) {
-      setLoading(false);
-      return;
-    }
+    if (!user || !user.username) { setLoading(false); return; }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/groups/${user.username}`);
-      if (response.ok) {
-        const data = await response.json();
+      const res = await fetch(`${API_BASE_URL}/groups/${user.username}`);
+      if (res.ok) {
+        const data = await res.json();
         setAllGroups(data);
       } else {
         setMessage('Error fetching groups.');
         setAllGroups([]);
       }
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch {
       setMessage('Network error: Could not connect to the server.');
       setAllGroups([]);
     } finally {
@@ -56,65 +48,50 @@ function SubscriberDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (user) fetchGroups();
-  }, [user]);
+  useEffect(() => { if (user) fetchGroups(); }, [user]);
 
-  // --- Fetch files dynamically and navigate to Download Page ---
+  // Fetch files for a group and navigate, passing data via state
   const handleNavigateClick = async (groupName) => {
-    console.log(`Fetching reports for group: ${groupName}`);
+    setMessage('');
     try {
-      const response = await fetch(`${FILE_BASE_URL}/group/${groupName}`);
-      if (response.ok) {
-        const data = await response.json();
-        // Navigate to SubscriberDownloadPage with fetched data
+      const res = await fetch(`${FILE_BASE_URL}/group/${groupName}`);
+      if (res.ok) {
+        const data = await res.json();
         navigate(`/subscriber/reports/${groupName}`, { state: { reports: data } });
       } else {
         setMessage(`Failed to load files for ${groupName}`);
       }
-    } catch (error) {
-      console.error("Error fetching group files:", error);
+    } catch {
       setMessage('Network error: Could not load reports.');
     }
   };
 
-  // --- Subscription Request Function ---
   const handleSubscriptionRequest = async (group) => {
     setMessage('');
     try {
-      const response = await fetch(`${API_BASE_URL}/request`, {
+      const res = await fetch(`${API_BASE_URL}/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: user.username,
-          groupName: group.addgroup
-        }),
+        body: JSON.stringify({ username: user.username, groupName: group.addgroup }),
       });
-      if (response.ok) {
+      if (res.ok) {
         setMessage(`Subscription request sent for: ${group.addgroup}. Awaiting approval.`);
         fetchGroups();
         setActiveTable('pending');
       } else {
-        const errorText = await response.text();
-        setMessage(`Request failed: ${errorText}`);
+        setMessage(`Request failed: ${await res.text()}`);
       }
-    } catch (error) {
-      console.error("Error sending request:", error);
+    } catch {
       setMessage('Network error: Failed to send request.');
     }
   };
 
-  // --- Filters ---
   const filterGroups = (groups) => {
     if (!searchTerm) return groups;
     const term = searchTerm.toLowerCase();
-    return groups.filter(group =>
-      group.addgroup.toLowerCase().includes(term) ||
-      group.description.toLowerCase().includes(term)
-    );
+    return groups.filter(g => g.addgroup.toLowerCase().includes(term) || g.description.toLowerCase().includes(term));
   };
 
-  // Split groups by status
   const subscribedGroups = useMemo(() => allGroups.filter(g => g.status === 'Subscribed'), [allGroups]);
   const unsubscribedGroups = useMemo(() => allGroups.filter(g => g.status === 'Unsubscribed'), [allGroups]);
   const pendingGroups = useMemo(() => allGroups.filter(g => g.status === 'Pending'), [allGroups]);
@@ -123,7 +100,6 @@ function SubscriberDashboard() {
   const filteredUnsubscribedGroups = useMemo(() => filterGroups(unsubscribedGroups), [unsubscribedGroups, searchTerm]);
   const filteredPendingGroups = useMemo(() => filterGroups(pendingGroups), [pendingGroups, searchTerm]);
 
-  // --- TABLE COMPONENTS ---
   const SubscribedContentTable = () => (
     <div className="reports-area primary-table-card">
       <h2 className="report-title">Subscribed Groups ({filteredSubscribedGroups.length})</h2>
@@ -137,20 +113,18 @@ function SubscriberDashboard() {
           </tr>
         </thead>
         <tbody>
-          {filteredSubscribedGroups.length > 0 ? (
-            filteredSubscribedGroups.map(group => (
-              <tr key={group.id} onClick={() => handleNavigateClick(group.addgroup)} title="Click to view reports">
-                <td>
-                  <a href="#" onClick={(e) => { e.preventDefault(); handleNavigateClick(group.addgroup); }} className="action-link">
-                    {group.addgroup}
-                  </a>
-                </td>
-                <td>{group.description}</td>
-                <td>{new Date().toLocaleDateString()}</td>
-                <td><span className={`status-tag status-${group.status.toLowerCase()}`}>{group.status}</span></td>
-              </tr>
-            ))
-          ) : (
+          {filteredSubscribedGroups.length > 0 ? filteredSubscribedGroups.map(group => (
+            <tr key={group.id} onClick={() => handleNavigateClick(group.addgroup)} title="Click to view reports">
+              <td>
+                <a href="#" onClick={(e) => { e.preventDefault(); handleNavigateClick(group.addgroup); }} className="action-link">
+                  {group.addgroup}
+                </a>
+              </td>
+              <td>{group.description}</td>
+              <td>{new Date().toLocaleDateString()}</td>
+              <td><span className={`status-tag status-${group.status.toLowerCase()}`}>{group.status}</span></td>
+            </tr>
+          )) : (
             <tr><td colSpan="4" className="no-reports">No subscribed groups found.</td></tr>
           )}
         </tbody>
@@ -170,19 +144,17 @@ function SubscriberDashboard() {
           </tr>
         </thead>
         <tbody>
-          {filteredUnsubscribedGroups.length > 0 ? (
-            filteredUnsubscribedGroups.map(group => (
-              <tr key={group.id}>
-                <td>{group.addgroup}</td>
-                <td>{group.description}</td>
-                <td>
-                  <button className="action-button subscribe-button" onClick={() => handleSubscriptionRequest(group)}>
-                    <SendIcon /> Send Request
-                  </button>
-                </td>
-              </tr>
-            ))
-          ) : (
+          {filteredUnsubscribedGroups.length > 0 ? filteredUnsubscribedGroups.map(group => (
+            <tr key={group.id}>
+              <td>{group.addgroup}</td>
+              <td>{group.description}</td>
+              <td>
+                <button className="action-button subscribe-button" onClick={() => handleSubscriptionRequest(group)}>
+                  <SendIcon /> Send Request
+                </button>
+              </td>
+            </tr>
+          )) : (
             <tr><td colSpan="3" className="no-reports">No new groups available.</td></tr>
           )}
         </tbody>
@@ -202,15 +174,13 @@ function SubscriberDashboard() {
           </tr>
         </thead>
         <tbody>
-          {filteredPendingGroups.length > 0 ? (
-            filteredPendingGroups.map(group => (
-              <tr key={group.id}>
-                <td>{group.addgroup}</td>
-                <td>{group.description}</td>
-                <td><span className={`status-tag status-${group.status.toLowerCase()}`}>{group.status}</span></td>
-              </tr>
-            ))
-          ) : (
+          {filteredPendingGroups.length > 0 ? filteredPendingGroups.map(group => (
+            <tr key={group.id}>
+              <td>{group.addgroup}</td>
+              <td>{group.description}</td>
+              <td><span className={`status-tag status-${group.status.toLowerCase()}`}>{group.status}</span></td>
+            </tr>
+          )) : (
             <tr><td colSpan="3" className="no-reports">No pending requests.</td></tr>
           )}
         </tbody>
@@ -220,12 +190,10 @@ function SubscriberDashboard() {
 
   const MainContentTable = () => {
     if (loading) return <div className="p-5 text-center">Loading Groups...</div>;
-    switch (activeTable) {
-      case 'subscribed': return <SubscribedContentTable />;
-      case 'unsubscribed': return <UnsubscribedContentTable />;
-      case 'pending': return <PendingRequestsTable />;
-      default: return null;
-    }
+    if (activeTable === 'subscribed') return <SubscribedContentTable />;
+    if (activeTable === 'unsubscribed') return <UnsubscribedContentTable />;
+    if (activeTable === 'pending') return <PendingRequestsTable />;
+    return null;
   };
 
   if (!user || !CloseIcon || !NotificationIcon) {
@@ -234,8 +202,6 @@ function SubscriberDashboard() {
 
   return (
     <div className="dashboard-content">
-
-      {/* Search Bar */}
       <div className="search-bar-container">
         <div className="search-input-group">
           <SearchIcon />
@@ -249,10 +215,8 @@ function SubscriberDashboard() {
         </div>
       </div>
 
-      {/* Feedback Message */}
       {message && <div className="alert alert-info p-2 text-center my-3">{message}</div>}
 
-      {/* Tabs */}
       <div className="tab-switcher">
         <button className={`tab-button ${activeTable === 'subscribed' ? 'active' : ''}`} onClick={() => setActiveTable('subscribed')}>
           Subscribed Groups ({filteredSubscribedGroups.length})
@@ -265,17 +229,12 @@ function SubscriberDashboard() {
         </button>
       </div>
 
-      {/* Main Grid */}
       <div
         className="main-content-grid"
-        style={{
-          gridTemplateColumns: showNotifications ? '60% 1fr' : '1fr',
-          gap: showNotifications ? '30px' : '0'
-        }}
+        style={{ gridTemplateColumns: showNotifications ? '60% 1fr' : '1fr', gap: showNotifications ? '30px' : '0' }}
       >
         <MainContentTable />
 
-        {/* Notifications */}
         {showNotifications && (
           <div className="notification-panel">
             <div className="notification-header">
@@ -285,9 +244,9 @@ function SubscriberDashboard() {
             </div>
             <div className="notification-content-nk">
               <ul>
-                {initialNotifications.map((note, index) => (
-                  <li key={index} onClick={() => handleNavigateClick(note.report)}>
-                    <strong>{note.report}:</strong> <span>{note.message}</span>
+                {initialNotifications.map((n, i) => (
+                  <li key={i} onClick={() => handleNavigateClick(n.report)}>
+                    <strong>{n.report}:</strong> <span>{n.message}</span>
                   </li>
                 ))}
               </ul>
