@@ -1,0 +1,106 @@
+package com.scb.rwtoolbackend.controller;
+
+import com.scb.rwtoolbackend.dto.FileRecordDto;
+import com.scb.rwtoolbackend.model.FileRecord;
+import com.scb.rwtoolbackend.repository.FileRecordRepository;
+import com.scb.rwtoolbackend.service.FileDistributorService;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/files")
+@CrossOrigin(origins = "http://localhost:3000") // Allow frontend to connect
+public class FileRecordController {
+
+    @Autowired
+    private FileRecordRepository fileRepo;
+    
+    @Autowired
+    private FileDistributorService distributorService;
+
+    // --- Constructor ---
+    // (Constructor is removed to favor @Autowired on fields, matching your other controllers)
+    
+    // --- Existing Endpoints (from your images) ---
+    
+    @GetMapping
+    public List<FileRecord> getAttributes() {
+        return fileRepo.findAll();
+    }
+
+    @PostMapping(value = "/uploadFile", consumes = "multipart/form-data")
+    public ResponseEntity<String> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("destinationFolder") String destinationFolder) {
+        
+        try {
+            // 1. Save the physical file to the "uploads" directory
+            Path uploadDir = Paths.get("uploads");
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+            
+            String fileName = file.getOriginalFilename();
+            Path filePath = uploadDir.resolve(fileName);
+            Files.copy(file.getInputStream(), filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            // 2. Create the generic FileRecord
+            FileRecord record = new FileRecord();
+            record.setFileName(fileName);
+            record.setDestinationFolder(destinationFolder);
+            record.setFilePath(filePath.toString());
+            record.setUploadDate(LocalDate.now());
+            // Save generic record (optional, but good for logging)
+            fileRepo.save(record); 
+
+            // 3. Distribute the file to the specific table (Ops, Finance, etc.)
+            distributorService.transferFile(record.getId());
+            
+            return ResponseEntity.ok("File uploaded successfully");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error uploading file");
+        }
+    }
+
+    @PostMapping("/transfer/{id}")
+    public ResponseEntity<String> transferFile(@PathVariable Long id) {
+        distributorService.transferFile(id);
+        return ResponseEntity.ok("File transferred successfully");
+    }
+
+    @GetMapping("/download/{type}/{id}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable String type, @PathVariable Long id) throws IOException {
+        return distributorService.downloadFile(type, id);
+    }
+    
+    // --- NEW ENDPOINT ---
+    /**
+     * Fetches a list of files for a specific group type (e.g., "ops", "finance").
+     * @param groupType The simple type (ops, finance, compliance).
+     * @return A list of FileRecordDto objects.
+     */
+    @GetMapping("/list/{groupType}")
+    public ResponseEntity<List<FileRecordDto>> getFilesByGroup(@PathVariable String groupType) {
+        try {
+            List<FileRecordDto> files = distributorService.getFilesByGroupType(groupType);
+            return ResponseEntity.ok(files);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+}
+
