@@ -1,0 +1,201 @@
+package com.scb.rwtoolbackend.service;
+
+import com.scb.rwtoolbackend.dto.FileRecordDto;
+import com.scb.rwtoolbackend.model.ComplianceFile;
+import com.scb.rwtoolbackend.model.FileRecord;
+import com.scb.rwtoolbackend.model.FinanceFile;
+import com.scb.rwtoolbackend.model.OpsFile;
+import com.scb.rwtoolbackend.repository.ComplianceFileRepository;
+import com.scb.rwtoolbackend.repository.FileRecordRepository;
+import com.scb.rwtoolbackend.repository.FinanceFileRepository;
+import com.scb.rwtoolbackend.repository.OpsFileRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class FileDistributorService {
+
+    @Autowired
+    private OpsFileRepository opsRepo;
+    @Autowired
+    private FileRecordRepository fileRecordRepo;
+    @Autowired
+    private FinanceFileRepository financeFileRepo;
+    @Autowired
+    private ComplianceFileRepository complianceRepo;
+
+    // (Your existing saveFile and getAllFileRecords methods are here)
+    // ...
+
+    /**
+     * Transfers a generic FileRecord to a specific file table (Ops, Finance, etc.)
+     * based on its destinationFolder.
+     * @param id The ID of the generic FileRecord.
+     */
+    public void transferFile(Long id) {
+        FileRecord file = fileRecordRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("File not found"));
+        
+        String folder = file.getDestinationFolder().toLowerCase();
+
+        if (folder.contains("ops")) {
+            OpsFile f = new OpsFile();
+            f.setFileName(file.getFileName());
+            f.setDestinationFolder(file.getDestinationFolder());
+            f.setFilePath(file.getFilePath());
+            f.setUploadDate(file.getUploadDate());
+            opsRepo.save(f);
+        } else if (folder.contains("finance")) {
+            FinanceFile f = new FinanceFile();
+            f.setFileName(file.getFileName());
+            f.setDestinationFolder(file.getDestinationFolder());
+            f.setFilePath(file.getFilePath());
+            f.setUploadDate(file.getUploadDate());
+            financeFileRepo.save(f);
+        } else if (folder.contains("compliance")) {
+            ComplianceFile f = new ComplianceFile();
+            f.setFileName(file.getFileName());
+            f.setDestinationFolder(file.getDestinationFolder());
+            f.setFilePath(file.getFilePath());
+            f.setUploadDate(file.getUploadDate());
+            complianceRepo.save(f);
+        }
+        
+        // We can optionally delete the generic record after transfer,
+        // or keep it for logging. Based on your code, it's kept.
+        // fileRecordRepo.delete(file);
+    }
+
+    /**
+     * Prepares a file for download based on its type and ID.
+     * @param type The group type (ops, finance, compliance)
+     * @param id The ID of the file in its specific table
+     * @return A ResponseEntity containing the file resource
+     * @throws IOException
+     */
+    public ResponseEntity<Resource> downloadFile(String type, Long id) throws IOException {
+        String filePath = "";
+        String fileName = "";
+
+        switch (type.toLowerCase()) {
+            case "ops":
+                OpsFile opsFile = opsRepo.findById(id).orElseThrow();
+                filePath = opsFile.getFilePath();
+                fileName = opsFile.getFileName();
+                break;
+            case "finance":
+                FinanceFile financeFile = financeFileRepo.findById(id).orElseThrow();
+                filePath = financeFile.getFilePath();
+                fileName = financeFile.getFileName();
+                break;
+            case "compliance":
+                ComplianceFile complianceFile = complianceRepo.findById(id).orElseThrow();
+                filePath = complianceFile.getFilePath();
+                fileName = complianceFile.getFileName();
+                break;
+            default:
+                throw new RuntimeException("Invalid file type");
+        }
+
+        Path path = Paths.get(filePath);
+        Resource resource = new UrlResource(path.toUri());
+
+        if (!resource.exists() || !resource.isReadable()) {
+            throw new IOException("File not found: " + filePath);
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF) // Assuming PDF, adjust if needed
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .body(resource);
+    }
+    
+    // --- NEW METHOD ---
+    /**
+     * Fetches a list of files for a specific group type (e.g., "ops", "finance").
+     * @param groupType The simple type (ops, finance, compliance).
+     * @return A list of FileRecordDto objects.
+     */
+    public List<FileRecordDto> getFilesByGroupType(String groupType) {
+        switch (groupType.toLowerCase()) {
+            case "ops":
+                // Fetch all OpsFile entities and map them to FileRecordDto
+                return opsRepo.findAll().stream()
+                        .map(file -> new FileRecordDto(
+                                file.getId(), 
+                                file.getFileName(), 
+                                file.getDestinationFolder(), 
+                                file.getUploadDate()
+                        ))
+                        .collect(Collectors.toList());
+            case "finance":
+                // Fetch all FinanceFile entities and map them to FileRecordDto
+                return financeFileRepo.findAll().stream()
+                        .map(file -> new FileRecordDto(
+                                file.getId(), 
+                                file.getFileName(), 
+                                file.getDestinationFolder(), 
+                                file.getUploadDate()
+                        ))
+                        .collect(Collectors.toList());
+            case "compliance":
+                // Fetch all ComplianceFile entities and map them to FileRecordDto
+                return complianceRepo.findAll().stream()
+                        .map(file -> new FileRecordDto(
+                                file.getId(), 
+                                file.getFileName(), 
+                                file.getDestinationFolder(), 
+                                file.getUploadDate()
+                        ))
+                        .collect(Collectors.toList());
+            default:
+                throw new IllegalArgumentException("Invalid group type: " + groupType);
+        }
+    }
+    
+    // --- We also need to update the DTO to accept the new fields ---
+    // (Assuming FileRecordDto is updated like this)
+    // Note: This DTO class is likely in its own file, but shown here for context.
+    // Make sure your FileRecordDto.java matches this constructor.
+    /*
+    package com.scb.rwtoolbackend.dto;
+    import java.time.LocalDate;
+    
+    // ... (Lombok annotations or manual getters/setters)
+    public class FileRecordDto {
+        private Long id;
+        private String fileName;
+        private String destinationFolder;
+        private String status; // You had this field, can be used for file status
+        private LocalDate uploadDate;
+    
+        // Default constructor
+        public FileRecordDto() {}
+    
+        // Constructor used by the new service method
+        public FileRecordDto(Long id, String fileName, String destinationFolder, LocalDate uploadDate) {
+            this.id = id;
+            this.fileName = fileName;
+            this.destinationFolder = destinationFolder;
+            this.uploadDate = uploadDate;
+        }
+        
+        // ... (Getters and Setters) ...
+    }
+    */
+}
+
