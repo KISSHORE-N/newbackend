@@ -1,0 +1,24 @@
+@RestController
+@RequestMapping("/api/files")
+@RequiredArgsConstructor
+public class FileFetchController {
+
+    private final OpsFileRepository opsRepo;
+    private final ComplianceFileRepository complianceRepo;
+    private final FinanceFileRepository financeRepo;
+
+    @GetMapping("/group/{groupName}")
+    public ResponseEntity<?> getFilesByGroup(@PathVariable String groupName) {
+        switch (groupName.toLowerCase()) {
+            case "ops_reports":
+                return ResponseEntity.ok(opsRepo.findAll());
+            case "compliance_data":
+                return ResponseEntity.ok(complianceRepo.findAll());
+            case "finance_reports":
+                return ResponseEntity.ok(financeRepo.findAll());
+            default:
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Invalid group name"));
+        }
+    }
+}
