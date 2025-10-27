@@ -1,191 +1,338 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
-import '../CommonStyles.css';
+import { useSearchParams } from 'react-router-dom';
+import '.../main_page/CommonStyles.css';
 
+// Icons (No change)
 const DownloadIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 );
 
 const ClearIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="15" y1="9" x2="9" y2="15" />
-    <line x1="9" y1="9" x2="15" y2="15" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
 );
 
-// Fallback (only used if nothing was passed from Dashboard)
-const FALLBACK_REPORTS = Array.from({ length: 10 }).map((_, i) => ({
-  id: 1000 + i + 1,
-  rname: `Demo File ${i + 1}`,
-  description: 'Static demo file (no backend data received).',
-  date: `2024-01-${String(i + 1).padStart(2, '0')}`,
-  status: (i + 1) % 2 === 0 ? 'Processed' : 'Pending',
-  url: '#'
-}));
+// --- REMOVED MOCK DATA ---
+// The REPORT_DATA_BY_GROUP and generateAndMapReports() functions are no longer needed
+// We will fetch real data from the API.
+
+// We keep FALLBACK_REPORTS for demo or error states
+const FALLBACK_REPORTS = [];
+for (let i = 1; i <= 20; i++) {
+    FALLBACK_REPORTS.push({
+        id: 9000 + i,
+        rname: `Demo file ${i}. Template Metrics`,
+        description: 'Static file for demonstration purposes. Date range is 2024-01-01 to 2024-01-20.',
+        date: `2024-01-${String(i).padStart(2, '0')}`,
+        status: i % 3 === 0 ? 'Pending' : 'Processed',
+        url: `/subscriber/reports/demo_${i}.pdf`, // This URL is a placeholder
+        selected: false
+    });
+}
+
+/**
+ * --- NEW HELPER FUNCTION ---
+ * Maps the frontend URL query param (e.g., "Finance_Reports")
+ * to the backend API path variable (e.g., "finance").
+ */
+const mapGroupToApiType = (groupQueryParam) => {
+    if (!groupQueryParam) return null;
+    const lowerGroup = groupQueryParam.toLowerCase();
+    
+    // Match based on your backend service logic
+    if (lowerGroup.startsWith('finance')) return 'finance';
+    if (lowerGroup.startsWith('ops')) return 'ops';
+    if (lowerGroup.startsWith('compliance')) return 'compliance';
+    
+    // Add other mappings as needed
+    // if (lowerGroup.startsWith('it_security')) return 'it'; 
+    // if (lowerGroup.startsWith('treasury_assets')) return 'treasury';
+
+    return null; // Return null for unmapped or fallback groups
+};
+
 
 function SubscriberDownloadPage() {
-  const location = useLocation();
-  const activeGroup = location.pathname.split('/').pop();
-  const reportsFromNav = location.state?.reports || [];
+    const [searchParams] = useSearchParams();
+    const activeGroup = searchParams.get('group');
+    
+    // --- NEW STATE ---
+    // This state will hold the data fetched from the API
+    const [reports, setReports] = useState([]); 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-  const reportsForGroup = useMemo(() => {
-    return reportsFromNav.length > 0 ? reportsFromNav : FALLBACK_REPORTS;
-  }, [reportsFromNav]);
+    // --- REMOVED ---
+    // const reportsForGroup = useMemo(...) is removed.
+    // We will use the 'reports' state variable directly.
+    
+    // --- State Management ---
+    const [selections, setSelections] = useState({});
+    const [inputFromDate, setInputFromDate] = useState('');
+    const [inputToDate, setInputToDate] = useState('');
+    const [filterFromDate, setFilterFromDate] = useState('');
+    const [filterToDate, setFilterToDate] = useState('');
 
-  const [selections, setSelections] = useState({});
-  const [inputFromDate, setInputFromDate] = useState('');
-  const [inputToDate, setInputToDate] = useState('');
-  const [filterFromDate, setFilterFromDate] = useState('');
-  const [filterToDate, setFilterToDate] = useState('');
+    // --- NEW: DATA FETCHING EFFECT ---
+    useEffect(() => {
+        // 1. Map the frontend group name to the backend API name
+        const apiGroupType = mapGroupToApiType(activeGroup);
 
-  useEffect(() => {
-    const initial = {};
-    reportsForGroup.forEach(r => { initial[r.id] = false; });
-    setSelections(initial);
-    setInputFromDate('');
-    setInputToDate('');
-    setFilterFromDate('');
-    setFilterToDate('');
-  }, [reportsForGroup]);
+        if (!apiGroupType) {
+            // If group is invalid or not mapped, show demo data
+            setReports(FALLBACK_REPORTS);
+            setLoading(false);
+            setError(`Invalid or unmapped group: ${activeGroup}. Displaying demo data.`);
+            return;
+        }
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    if (name === 'from') setInputFromDate(value);
-    if (name === 'to') setInputToDate(value);
-  };
+        const fetchData = async () => {
+            setLoading(true);
+            setError(null);
+            
+            try {
+                // Assuming /api/distributor is your base path (check your proxy)
+                const response = await fetch(`/api/distributor/list/${apiGroupType}`);
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
 
-  const handleSearch = () => {
-    setFilterFromDate(inputFromDate);
-    setFilterToDate(inputToDate);
-  };
+                const data = await response.json(); // This is List<FileRecordDto>
 
-  const handleClearFilters = () => {
-    setInputFromDate('');
-    setInputToDate('');
-    setFilterFromDate('');
-    setFilterToDate('');
-  };
+                // 2. Transform API data to fit the frontend table structure
+                const transformedData = data.map(file => ({
+                    id: file.id,
+                    rname: file.fileName,
+                    description: `Uploaded to: ${file.destinationFolder}`, // Using destination as description
+                    date: file.uploadDate, // Assumes 'YYYY-MM-DD' string
+                    status: file.status || 'Processed', // Fallback for null status
+                    // IMPORTANT: Assuming a download endpoint. You must create this.
+                    url: `/api/distributor/download/id/${file.id}` 
+                }));
 
-  const filteredReports = useMemo(() => {
-    const from = filterFromDate ? new Date(filterFromDate) : null;
-    let to = filterToDate ? new Date(filterToDate) : null;
-    if (to) to.setHours(23, 59, 59, 999);
+                setReports(transformedData);
 
-    return reportsForGroup.filter((r) => {
-      const d = r.date ? new Date(r.date) : null;
-      if (!d || isNaN(d.getTime())) return true;
-      const after = from ? d >= from : true;
-      const before = to ? d <= to : true;
-      return after && before;
-    });
-  }, [reportsForGroup, filterFromDate, filterToDate]);
+            } catch (e) {
+                console.error("Failed to fetch reports:", e);
+                setError(e.message);
+                setReports(FALLBACK_REPORTS); // Show fallback data on error
+            } finally {
+                setLoading(false);
+            }
+        };
 
-  const handleSelect = (id) => setSelections(prev => ({ ...prev, [id]: !prev[id] }));
+        fetchData();
 
-  const selected = filteredReports.filter(r => selections[r.id]);
-  const allSelected = selected.length === filteredReports.length && filteredReports.length > 0;
-  const isIndeterminate = selected.length > 0 && selected.length < filteredReports.length;
+    }, [activeGroup]); // Re-run this effect when the ?group=... URL param changes
 
-  const handleSelectAll = (e) => {
-    const checked = e.target.checked;
-    const copy = { ...selections };
-    filteredReports.forEach(r => (copy[r.id] = checked));
-    setSelections(copy);
-  };
 
-  const handleDownloadZip = () => {
-    if (selected.length === 0) { alert('Please select at least one report.'); return; }
-    alert(`Downloading ${selected.length} selected reports...`);
-  };
+    // --- MODIFIED: SELECTION RESET EFFECT ---
+    // This effect now depends on 'reports' (our state) instead of 'reportsForGroup'
+    useEffect(() => {
+        const initialSelections = {};
+        reports.forEach(report => {
+            initialSelections[report.id] = false;
+        });
+        setSelections(initialSelections);
+        
+        // Also clean any filter dates
+        setInputFromDate('');
+        setInputToDate('');
+        setFilterFromDate('');
+        setFilterToDate('');
+    }, [reports]); // <-- MODIFIED dependency
 
-  const pageTitle = activeGroup ? `${activeGroup.replace(/_/g, ' ')} Reports` : 'Reports';
+    // --- Filter Handlers (No change) ---
+    const handleInputChange = (event) => {
+        const { name, value } = event.target;
+        if (name === 'from') {
+            setInputFromDate(value);
+        } else if (name === 'to') {
+            setInputToDate(value);
+        }
+    };
 
-  return (
-    <div className="download-page-wrapper">
-      <div className="dashboard-content">
+    const handleSearch = () => {
+        setFilterFromDate(inputFromDate);
+        setFilterToDate(inputToDate);
+    };
 
-        {/* Filters */}
-        <div className="top-filter-bar">
-          <div className="filter-card-content">
-            <div className="form-group">
-              <label htmlFor="from">From Date</label>
-              <input type="date" name="from" id="from" value={inputFromDate} onChange={handleInputChange} />
+    const handleClearFilters = () => {
+        setInputFromDate('');
+        setInputToDate('');
+        setFilterFromDate('');
+        setFilterToDate('');
+    };
+
+    const handleSelect = (id) => {
+        setSelections(prev => ({
+            ...prev,
+            [id]: !prev[id]
+        }));
+    };
+
+    // --- MODIFIED: CORE FILTERING LOGIC ---
+    // This useMemo now depends on 'reports' state instead of 'reportsForGroup'
+    const filteredReports = useMemo(() => {
+        const from = filterFromDate ? new Date(filterFromDate) : null;
+        let to = filterToDate ? new Date(filterToDate) : null;
+
+        if (from) {
+            from.setHours(0, 0, 0, 0); 
+        }
+        if (to) {
+            to.setHours(23, 59, 59, 999); 
+        }
+
+        return reports.filter(function(report) {
+            const reportDate = new Date(report.date);
+            if (isNaN(reportDate.getTime())) return false;
+            const isAfterOrEqual = from ? reportDate >= from : true;
+            const isBeforeOrEqual = to ? reportDate <= to : true;
+            return isAfterOrEqual && isBeforeOrEqual;
+        });
+    }, [reports, filterFromDate, filterToDate]); // <-- MODIFIED dependencies
+
+    // --- Selection Calculation (No change) ---
+    const selectedForDownload = useMemo(() => {
+        return filteredReports.filter(r => selections[r.id]);
+    }, [filteredReports, selections]);
+    
+    const selectedCount = selectedForDownload.length;
+    const allFilteredSelected = selectedCount === filteredReports.length && filteredReports.length > 0;
+    const isIndeterminate = selectedCount > 0 && selectedCount < filteredReports.length;
+
+    const handleSelectAll = (event) => {
+        const checked = event.target.checked;
+        const newSelections = { ...selections }; 
+        filteredReports.forEach(report => {
+            newSelections[report.id] = checked;
+        });
+        setSelections(newSelections);
+    };
+
+    const handleDownloadZip = () => {
+        const count = selectedForDownload.length; 
+        if (count > 0) {
+            console.log(`Downloading ${count} selected files in ZIP format...`);
+            alert(`Initiating download for ${count} selected reports.`);
+        } else {
+            alert("Please select reports to download.");
+        }
+    };
+
+    // Page Title (No change)
+    const pageTitle = activeGroup
+        ? `${activeGroup.replace(/_/g, ' ')} Reports`
+        : "All Available Reports (Demo)";
+
+    return (
+        <div className="download-page-wrapper">
+            <div className="dashboard-content">
+                {/* --- TOP FILTER BAR (No change) --- */}
+                <div className="top-filter-bar">
+                    <div className="filter-card-content">
+                        <div className="form-group">
+                            <label htmlFor="from">Select from date</label>
+                            <input type="date" name="from" id="from" value={inputFromDate} onChange={handleInputChange} className="date-input"/>
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="to">Select to date</label>
+                            <input type="date" name="to" id="to" value={inputToDate} onChange={handleInputChange} className="date-input"/>
+                        </div>
+                        <button className="action-button filter-search-button" onClick={handleSearch}>
+                            Search Files
+                        </button>
+                        <button 
+                            className="action-button clear-filter-button" 
+                            onClick={handleClearFilters} 
+                            disabled={!inputFromDate && !inputToDate && !filterFromDate && !filterToDate}>
+                            <ClearIcon /> Clear Filters
+                        </button>
+                    </div>
+                </div>
+
+                <div className="download-action-content">
+                    <button className="action-button secondary-button" onClick={handleDownloadZip} disabled={selectedForDownload.length === 0}>
+                        <DownloadIcon /> Download
+                    </button>
+                </div>
             </div>
-            <div className="form-group">
-              <label htmlFor="to">To Date</label>
-              <input type="date" name="to" id="to" value={inputToDate} onChange={handleInputChange} />
-            </div>
-            <button className="action-button filter-search-button" onClick={handleSearch}>Search</button>
-            <button className="action-button clear-filter-button" onClick={handleClearFilters} disabled={!filterFromDate && !filterToDate}>
-              <ClearIcon /> Clear
-            </button>
-          </div>
-        </div>
+            
+            {/* --- REPORTS TABLE AREA --- */}
+            <div className="main-reports-area reports-area">
+                <h3 className="report-title">{pageTitle} ({filteredReports.length} found)</h3>
 
-        {/* Download CTA */}
-        <div className="download-action-content">
-          <button className="action-button secondary-button" onClick={handleDownloadZip} disabled={selected.length === 0}>
-            <DownloadIcon /> Download ({selected.length})
-          </button>
-        </div>
-
-        {/* Table */}
-        <div className="main-reports-area">
-          <h3 className="report-title-pagination">{pageTitle} ({filteredReports.length})</h3>
-
-          <div className="table-responsive">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '4%' }}>
-                    <input
-                      type="checkbox"
-                      className="select-checkbox"
-                      checked={allSelected}
-                      ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
-                      onChange={handleSelectAll}
-                    />
-                  </th>
-                  <th style={{ width: '20%' }}>Report Name</th>
-                  <th style={{ width: '35%' }}>Description</th>
-                  <th style={{ width: '15%' }}>Date</th>
-                  <th style={{ width: '10%' }}>Status</th>
-                  <th style={{ width: '16%' }}>Download</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReports.length > 0 ? filteredReports.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <input type="checkbox" className="select-checkbox" checked={selections[r.id] || false} onChange={() => handleSelect(r.id)} />
-                    </td>
-                    <td>{r.rname || r.fileName || `File #${r.id}`}</td>
-                    <td><p className="report-description">{r.description || 'No description'}</p></td>
-                    <td>{r.date || 'N/A'}</td>
-                    <td><span className={`status-tag status-${(r.status || 'Available').toLowerCase()}`}>{r.status || 'Available'}</span></td>
-                    <td>
-                      <a href={r.url || '#'} download>
-                        Download PDF
-                      </a>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan="6" className="no-reports">No reports found. Try adjusting filters.</td></tr>
+                {/* --- NEW: Loading and Error Handling --- */}
+                {loading && <div className="loading-message">Loading reports...</div>}
+                {error && <div className="error-message">Error: {error} (Showing demo data)</div>}
+                
+                {!loading && (
+                    <div className="table-responsive">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: '4%' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            className="select-checkbox" 
+                                            checked={allFilteredSelected} 
+                                            ref={input => { 
+                                                if (input) { 
+                                                    input.indeterminate = isIndeterminate; 
+                                                } 
+                                            }} 
+                                            onChange={handleSelectAll} 
+                                            disabled={filteredReports.length === 0} 
+                                        />
+                                    </th>
+                                    <th style={{ width: '15%' }}>Report Name</th>
+                                    <th style={{ width: '35%' }}>Description</th>
+                                    <th style={{ width: '10%' }}>Report Date</th>
+                                    <th style={{ width: '18%' }}>Status</th>
+                                    <th style={{ width: '18%' }}>Download</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredReports.length > 0 ? (
+                                    filteredReports.map((report) => (
+                                        <tr key={report.id}>
+                                            <td>
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="select-checkbox" 
+                                                    checked={selections[report.id] || false} 
+                                                    onChange={() => handleSelect(report.id)} 
+                                                /> 
+                                            </td>
+                                            <td>{report.rname}</td>
+                                            <td><p className="report-description">{report.description}</p></td>
+                                            <td>{report.date}</td>
+                                            <td>
+                                                {/* MODIFIED: Added a fallback class for null/default status */}
+                                                <span className={`status-tag status-${report.status?.toLowerCase() || 'processed'}`}>{report.status}</span>
+                                            </td>
+                                            <td>
+                                                {/* MODIFIED: This now points to our new assumed API URL */}
+                                                <a href={report.url} download={report.rname} className="action-link">Download PDF</a>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="6" className="no-reports">
+                                            No reports found matching the criteria.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          <br /><br />
+            </div>
+            <br /><br />
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 export default SubscriberDownloadPage;
