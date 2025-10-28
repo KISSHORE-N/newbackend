@@ -195,3 +195,31 @@ public class DistributorService {
     
     // ... (your existing downloadFile and downloadFilesAsZip methods) ...
 }
+
+
+
+
+????Newlogic
+
+if (group != null) {
+            // Find all 'APPROVED' subscriptions for this group
+            List<SubscriptionRequest> approvedSubscriptions = subscriptionRequestRepo
+                .findByGroupAndStatus(group, RequestStatus.APPROVED);
+
+            if (approvedSubscriptions.isEmpty()) {
+                System.out.println("SKIPPED: No 'APPROVED' subscribers found for this group.");
+            } else {
+                System.out.println("Found " + approvedSubscriptions.size() + " approved subscribers. Creating notifications...");
+                
+                String message = "A new report '" + fileName + "' is now available.";
+
+                // Loop and notify each one
+                for (SubscriptionRequest sub : approvedSubscriptions) {
+                    Subscriber subscriberToNotify = sub.getSubscriber();
+                    if (subscriberToNotify != null) {
+                        notificationService.createNotification(subscriberToNotify, message);
+                        System.out.println("Notification created for user: " + subscriberToNotify.getUsername()); // Assuming getUsername()
+                    }
+                }
+            }
+        }
