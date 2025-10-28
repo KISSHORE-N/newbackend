@@ -131,3 +131,403 @@ public ResponseEntity<Resource> downloadFilesAsZip(String type, List<Long> ids) 
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + zipFileName + "\"")
             .body(zipResource);
 }
+
+
+
+
+???THIS IS FOR FRONTEND
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import '.../main_page/CommonStyles.css'; // Assuming this path is correct in your project
+
+// Icons (No change)
+const DownloadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+);
+
+const ClearIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+);
+
+// FALLBACK_REPORTS (No change)
+const FALLBACK_REPORTS = [];
+for (let i = 1; i <= 20; i++) {
+    FALLBACK_REPORTS.push({
+        id: 9000 + i,
+        rname: `Demo file ${i}. Template Metrics`,
+        description: 'Static file for demonstration purposes. Date range is 2024-01-01 to 2024-01-20.',
+        date: `2024-01-${String(i).padStart(2, '0')}`,
+        status: i % 3 === 0 ? 'Pending' : 'Processed',
+        url: `/subscriber/reports/demo_${i}.pdf`,
+        selected: false
+    });
+}
+
+// mapGroupToApiType (No change)
+const mapGroupToApiType = (groupQueryParam) => {
+    if (!groupQueryParam) return null;
+    const lowerGroup = groupQueryParam.toLowerCase();
+    
+    if (lowerGroup.startsWith('finance')) return 'finance';
+    if (lowerGroup.startsWith('ops')) return 'ops';
+    if (lowerGroup.startsWith('compliance')) return 'compliance';
+
+    return null; 
+};
+
+
+function SubscriberDownloadPage() {
+    const [searchParams] = useSearchParams();
+    const activeGroup = searchParams.get('group');
+    
+    // API Data State
+    const [reports, setReports] = useState([]); 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // State Management
+    const [selections, setSelections] = useState({});
+    const [inputFromDate, setInputFromDate] = useState('');
+    const [inputToDate, setInputToDate] = useState('');
+    const [filterFromDate, setFilterFromDate] = useState('');
+    const [filterToDate, setFilterToDate] = useState('');
+
+    // --- 1. NEW STATE ADDED ---
+    // State to manage the download button feedback
+    const [isDownloading, setIsDownloading] = useState(false);
+
+    // Data Fetching Effect (No change)
+    useEffect(() => {
+        const apiGroupType = mapGroupToApiType(activeGroup);
+
+        if (!apiGroupType) {
+            setReports(FALLBACK_REPORTS);
+            setLoading(false);
+            setError(`Invalid or unmapped group: ${activeGroup}. Displaying demo data.`);
+            return;
+        }
+
+        const fetchData = async () => {
+            setLoading(true);
+            setError(null);
+            
+            try {
+                // NOTE: Make sure '/api' prefix is correct for your proxy
+                const response = await fetch(`/api/distributor/list/${apiGroupType}`); 
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json(); 
+
+                const transformedData = data.map(file => ({
+                    id: file.id,
+                    rname: file.fileName,
+                    description: `Uploaded to: ${file.destinationFolder}`,
+                    date: file.uploadDate, 
+                    status: file.status || 'Processed', 
+                    // This URL is for SINGLE download, adjust if your endpoint is different
+                    url: `/api/distributor/download/${apiGroupType}/${file.id}` // Adjusted to match your *original* controller
+                }));
+
+                setReports(transformedData);
+
+            } catch (e) {
+                console.error("Failed to fetch reports:", e);
+                setError(e.message);
+                setReports(FALLBACK_REPORTS);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+
+    }, [activeGroup]); 
+
+
+    // Selection Reset Effect (No change)
+    useEffect(() => {
+        const initialSelections = {};
+        reports.forEach(report => {
+            initialSelections[report.id] = false;
+        });
+        setSelections(initialSelections);
+        
+        setInputFromDate('');
+        setInputToDate('');
+        setFilterFromDate('');
+        setFilterToDate('');
+    }, [reports]); 
+
+    // Filter Handlers (No change)
+    const handleInputChange = (event) => {
+        const { name, value } = event.target;
+        if (name === 'from') {
+            setInputFromDate(value);
+        } else if (name === 'to') {
+            setInputToDate(value);
+        }
+    };
+
+    const handleSearch = () => {
+        setFilterFromDate(inputFromDate);
+        setFilterToDate(inputToDate);
+    };
+
+    const handleClearFilters = () => {
+        setInputFromDate('');
+        setInputToDate('');
+        setFilterFromDate('');
+        setFilterToDate('');
+    };
+
+    const handleSelect = (id) => {
+        setSelections(prev => ({
+            ...prev,
+            [id]: !prev[id]
+        }));
+    };
+
+    // Core Filtering Logic (No change)
+    const filteredReports = useMemo(() => {
+        const from = filterFromDate ? new Date(filterFromDate) : null;
+        let to = filterToDate ? new Date(filterToDate) : null;
+
+        if (from) {
+            from.setHours(0, 0, 0, 0); 
+        }
+        if (to) {
+            to.setHours(23, 59, 59, 999); 
+        }
+
+        return reports.filter(function(report) {
+            const reportDate = new Date(report.date);
+            if (isNaN(reportDate.getTime())) return false;
+            const isAfterOrEqual = from ? reportDate >= from : true;
+            const isBeforeOrEqual = to ? reportDate <= to : true;
+            return isAfterOrEqual && isBeforeOrEqual;
+        });
+    }, [reports, filterFromDate, filterToDate]);
+
+    // Selection Calculation (No change)
+    const selectedForDownload = useMemo(() => {
+        return filteredReports.filter(r => selections[r.id]);
+    }, [filteredReports, selections]);
+    
+    const selectedCount = selectedForDownload.length;
+    const allFilteredSelected = selectedCount === filteredReports.length && filteredReports.length > 0;
+    const isIndeterminate = selectedCount > 0 && selectedCount < filteredReports.length;
+
+    const handleSelectAll = (event) => {
+        const checked = event.target.checked;
+        const newSelections = { ...selections }; 
+        filteredReports.forEach(report => {
+            newSelections[report.id] = checked;
+        });
+        setSelections(newSelections);
+    };
+
+    // --- 2. MODIFIED: ZIP DOWNLOAD HANDLER ---
+    // This is the new, complete download function.
+    const handleDownloadZip = async () => {
+        // 1. Get the list of selected report IDs
+        const ids = selectedForDownload.map(report => report.id);
+        
+        if (ids.length === 0) {
+            alert("Please select at least one file to download.");
+            return;
+        }
+
+        // 2. Get the correct API type (e.g., 'finance', 'ops')
+        const apiGroupType = mapGroupToApiType(activeGroup);
+        if (!apiGroupType) {
+            alert("Cannot download: Invalid file group.");
+            return;
+        }
+
+        // 3. Set loading state
+        setIsDownloading(true);
+
+        // 4. Build the URL
+        const idString = ids.join(',');
+        // This URL must match your Spring Boot Controller endpoint
+        const url = `/api/download/zip/${apiGroupType}?ids=${idString}`;
+
+        try {
+            const response = await fetch(url);
+
+            // 5. Handle HTTP errors
+            if (!response.ok) {
+                try {
+                    // Try to parse a JSON error message from the backend
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || "Failed to download files.");
+                } catch (jsonError) {
+                    // Fallback if the error response isn't JSON
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
+            }
+
+            // 6. Get filename from 'Content-Disposition' header
+            const disposition = response.headers.get('content-disposition');
+            let filename = `${apiGroupType}_files.zip`; // Default filename
+
+            if (disposition && disposition.indexOf('attachment') !== -1) {
+                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                const matches = filenameRegex.exec(disposition);
+                if (matches != null && matches[1]) {
+                    filename = matches[1].replace(/['"]/g, '');
+                }
+            }
+
+            // 7. Get file data as a Blob
+            const blob = await response.blob();
+
+            // 8. Create a temporary link to trigger the download
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = filename; // Set the downloaded file's name
+
+            document.body.appendChild(a);
+            a.click(); // Programmatically click the link to start the download
+
+            // 9. Clean up
+            window.URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(a);
+
+        } catch (error) {
+            console.error("Download error:", error);
+            alert(`Error downloading file: ${error.message}`);
+        } finally {
+            // 10. Reset loading state regardless of success or error
+            setIsDownloading(false);
+        }
+    };
+
+    // Page Title (No change)
+    const pageTitle = activeGroup
+        ? `${activeGroup.replace(/_/g, ' ')} Reports`
+        : "All Available Reports (Demo)";
+
+    return (
+        <div className="download-page-wrapper">
+            <div className="dashboard-content">
+                {/* --- TOP FILTER BAR (No change) --- */}
+                <div className="top-filter-bar">
+                    <div className="filter-card-content">
+                        <div className="form-group">
+                            <label htmlFor="from">Select from date</label>
+                            <input type="date" name="from" id="from" value={inputFromDate} onChange={handleInputChange} className="date-input"/>
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="to">Select to date</label>
+                            <input type="date" name="to" id="to" value={inputToDate} onChange={handleInputChange} className="date-input"/>
+                        </div>
+                        <button className="action-button filter-search-button" onClick={handleSearch}>
+                            Search Files
+                        </button>
+                        <button 
+                            className="action-button clear-filter-button" 
+                            onClick={handleClearFilters} 
+                            disabled={!inputFromDate && !inputToDate && !filterFromDate && !filterToDate}>
+                            <ClearIcon /> Clear Filters
+                        </button>
+                    </div>
+                </div>
+
+                <div className="download-action-content">
+                    {/* --- 3. MODIFIED: DOWNLOAD BUTTON --- */}
+                    <button 
+                        className="action-button secondary-button" 
+                        onClick={handleDownloadZip} 
+                        // Disable if no files are selected OR if a download is in progress
+                        disabled={selectedForDownload.length === 0 || isDownloading}
+                    >
+                        <DownloadIcon /> 
+                        {/* Show dynamic text based on download state */}
+                        {isDownloading ? 'Downloading...' : `Download Selected (${selectedForDownload.length})`}
+                    </button>
+                </div>
+            </div>
+            
+            {/* --- REPORTS TABLE AREA --- */}
+            <div className="main-reports-area reports-area">
+                <h3 className="report-title">{pageTitle} ({filteredReports.length} found)</h3>
+
+                {/* Loading and Error Handling (No change) */}
+                {loading && <div className="loading-message">Loading reports...</div>}
+                {error && <div className="error-message">Error: {error}</div>}
+                
+                {!loading && (
+                    <div className="table-responsive">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: '4%' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            className="select-checkbox" 
+                                            checked={allFilteredSelected} 
+                                            ref={input => { 
+                                                if (input) { 
+                                                    input.indeterminate = isIndeterminate; 
+                                                } 
+                                            }} 
+                                            onChange={handleSelectAll} 
+                                            disabled={filteredReports.length === 0} 
+                                        />
+                                    </th>
+                                    <th style={{ width: '15%' }}>Report Name</th>
+                                    <th style={{ width: '35%' }}>Description</th>
+                                    <th style={{ width: '10%' }}>Report Date</th>
+                                    <th style={{ width: '18%' }}>Status</th>
+                                    <th style={{ width: '18%' }}>Download</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredReports.length > 0 ? (
+                                    filteredReports.map((report) => (
+                                        <tr key={report.id}>
+                                            <td>
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="select-checkbox" 
+                                                    checked={selections[report.id] || false} 
+                                                    onChange={() => handleSelect(report.id)} 
+                                                /> 
+                                            </td>
+                                            <td>{report.rname}</td>
+                                            <td><p className="report-description">{report.description}</p></td>
+                                            <td>{report.date}</td>
+                                            <td>
+                                                <span className={`status-tag status-${report.status?.toLowerCase() || 'processed'}`}>{report.status}</span>
+                                            </td>
+                                            <td>
+                                                {/* This 'a' tag handles SINGLE file download */}
+                                                <a href={report.url} download={report.rname} className="action-link">Download PDF</a>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="6" className="no-reports">
+                                            No reports found matching the criteria.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+            <br /><br />
+        </div>
+    );
+}
+
+export default SubscriberDownloadPage;
