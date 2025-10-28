@@ -246,3 +246,54 @@ if (groupIdToFind != null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                  .body("Error: Invalid destination folder name.");
         }
+
+
+
+???Notificatin service for get mapping
+
+@Autowired
+    private SubscriberRepository subscriberRepository;
+
+    // ... (your existing createNotification method) ...
+
+    // --- 4. ADD THIS NEW METHOD ---
+    public List<NotificationDTO> getNotificationsForSubscriber(Long subscriberId) {
+        // 1. Find the subscriber
+        Subscriber subscriber = subscriberRepository.findById(subscriberId)
+                .orElseThrow(() -> new RuntimeException("Subscriber not found with id: " + subscriberId));
+        
+        // 2. Fetch the notifications
+        List<Notification> notifications = notificationRepository
+                .findBySubscriberOrderByCreatedDateDesc(subscriber);
+        
+        // 3. Map to DTOs
+        return notifications.stream()
+                .map(n -> new NotificationDTO(
+                        n.getId(),
+                        n.getMessage(),
+                        n.getCreatedDate(),
+                        n.isRead()
+                ))
+                .collect(Collectors.toList());
+    }
+
+
+???Notification controller for get mapping end point in filerecordcontroller
+
+@Autowired
+    private NotificationService notificationService;
+
+    /**
+     * GET endpoint to fetch all notifications for a specific subscriber.
+     * Example URL: /api/notifications/5
+     */
+    @GetMapping("/{subscriberId}")
+    public ResponseEntity<List<NotificationDTO>> getNotifications(@PathVariable Long subscriberId) {
+        try {
+            List<NotificationDTO> notifications = notificationService.getNotificationsForSubscriber(subscriberId);
+            return ResponseEntity.ok(notifications);
+        } catch (RuntimeException e) {
+            // This catches the "Subscriber not found" error
+            return ResponseEntity.notFound().build();
+        }
+    }
