@@ -1,0 +1,111 @@
+// In your SubscriberDashboard.js file...
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+
+// ... (API_URLS, Icons, etc. are unchanged) ...
+
+function SubscriberDashboard() {
+    // --- 1. GET 'onNotificationsLoaded' FROM CONTEXT ---
+    // Set a default empty function to prevent errors
+    const { 
+        showNotifications, 
+        toggleNotifications, 
+        user, 
+        CloseIcon, 
+        onNotificationsLoaded = () => {} 
+    } = useOutletContext();
+    
+    // ... (All your other state is unchanged)
+    const [notifications, setNotifications] = useState([]);
+
+    // ... (fetchGroups useEffect is unchanged) ...
+
+    // --- 2. MODIFY YOUR 'fetchNotifications' EFFECT ---
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            if (!user || !user.id) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_NOTIFICATIONS_URL}/${user.id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setNotifications(data); // Set state for this page
+
+                    // --- 3. CALL THE PARENT'S FUNCTION WITH THE COUNT ---
+                    onNotificationsLoaded(data.length); 
+
+                } else {
+                    console.error("Failed to fetch notifications");
+                    setNotifications([]);
+                    onNotificationsLoaded(0); // Also update on failure
+                }
+            } catch (error) {
+                console.error("Error fetching notifications:", error);
+                setNotifications([]);
+                onNotificationsLoaded(0); // Also update on error
+            }
+        };
+
+        fetchNotifications();
+    // --- 4. ADD 'onNotificationsLoaded' TO THE DEPENDENCY ARRAY ---
+    }, [user, onNotificationsLoaded]); 
+
+    // ... (Rest of the file is unchanged) ...
+    // Your filteredNotifications logic, tables, and JSX remain exactly the same.
+}
+
+export default SubscriberDashboard;
+
+
+
+????Layout.js
+
+// In your Layout.js file...
+import React, { useState } from 'react'; // Add useState
+import { Outlet } from 'react-router-dom';
+
+// ... (other imports, API_URLS, etc.)
+
+function Layout() {
+    // ... (Your existing state for user, showNotifications, etc.)
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [user, setUser] = useState({ id: 1, username: 'example_user' }); // Example user
+
+    // --- 1. ADD STATE FOR THE COUNT ---
+    // We'll use this count for the badge.
+    const [notificationCount, setNotificationCount] = useState(0);
+
+    const toggleNotifications = () => setShowNotifications(prev => !prev);
+    
+    // ... (Your CloseIcon component, etc.)
+
+    return (
+        <div className="layout-container">
+            <header>
+                {/* Your Header content */}
+                <button onClick={toggleNotifications}>
+                    Notifications 
+                    {/* --- 2. USE THE COUNT STATE HERE --- */}
+                    {notificationCount > 0 && (
+                        <span className="badge">{notificationCount}</span>
+                    )}
+                </button>
+            </header>
+            
+            <main>
+                {/* --- 3. PASS THE 'setNotificationCount' FUNCTION DOWN --- */}
+                <Outlet context={{ 
+                    showNotifications, 
+                    toggleNotifications, 
+                    user, 
+                    CloseIcon,
+                    onNotificationsLoaded: setNotificationCount // Pass the setter function
+                }} />
+            </main>
+        </div>
+    );
+}
+
+export default Layout;
