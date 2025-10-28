@@ -223,3 +223,26 @@ if (group != null) {
                 }
             }
         }
+
+
+???Controller end point
+
+if (groupIdToFind != null) {
+            // Fetch the actual ReportGroup entity from the database
+            Optional<ReportGroup> groupOpt = reportGroupRepo.findById(groupIdToFind);
+            
+            if (groupOpt.isPresent()) {
+                record.setReportGroup(groupOpt.get()); // Set the object
+            } else {
+                // This file will be saved without a group, which will cause 
+                // your notification logic to fail.
+                System.err.println("Error: ReportGroup with ID " + groupIdToFind + " not found!");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                     .body("Error: Server is misconfigured. Group not found.");
+            }
+        } else {
+            // Folder name didn't match
+            System.err.println("Warning: File uploaded to unmapped folder: " + destinationFolder);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .body("Error: Invalid destination folder name.");
+        }
