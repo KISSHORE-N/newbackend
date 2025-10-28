@@ -297,3 +297,53 @@ if (groupIdToFind != null) {
             return ResponseEntity.notFound().build();
         }
     }
+
+
+
+???NotificationDTO
+
+// src/main/java/com/scb/rwtoolbackend/dto/NotificationDTO.java
+package com.scb.rwtoolbackend.dto;
+
+import java.time.LocalDateTime;
+import lombok.Data; 
+
+@Data
+public class NotificationDTO {
+    private Long id;
+    private String message;
+    private LocalDateTime createdDate;
+    private boolean isRead;
+
+    // Constructor to map from the Entity
+    public NotificationDTO(Long id, String message, LocalDateTime createdDate, boolean isRead) {
+        this.id = id;
+        this.message = message;
+        this.createdDate = createdDate;
+        this.isRead = isRead;
+    }
+}
+
+
+
+???NotificationRepository
+
+// src/main/java/com/scb/rwtoolbackend/repository/NotificationRepository.java
+package com.scb.rwtoolbackend.repository;
+
+import com.scb.rwtoolbackend.model.Notification;
+import com.scb.rwtoolbackend.model.Subscriber;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface NotificationRepository extends JpaRepository<Notification, Long> {
+    
+    // Finds only UNREAD notifications (you might already have this)
+    List<Notification> findBySubscriberAndIsReadFalseOrderByCreatedDateDesc(Subscriber subscriber);
+    
+    // --- ADD THIS METHOD ---
+    // Finds ALL notifications for a user, newest first
+    List<Notification> findBySubscriberOrderByCreatedDateDesc(Subscriber subscriber);
+}
+
+
