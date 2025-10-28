@@ -1,0 +1,197 @@
+// src/main/java/com/scb/rwtoolbackend/model/Notification.java
+package com.scb.rwtoolbackend.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "notifications")
+@Data
+@NoArgsConstructor
+public class Notification {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // The user who will receive this notification
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscriber_id", nullable = false)
+    private Subscriber subscriber;
+
+    @Column(nullable = false, length = 512)
+    private String message;
+
+    @Column(nullable = false)
+    private LocalDateTime createdDate;
+
+    @Column(nullable = false)
+    private boolean isRead = false; // Default to false
+
+    public Notification(Subscriber subscriber, String message) {
+        this.subscriber = subscriber;
+        this.message = message;
+        this.createdDate = LocalDateTime.now();
+        this.isRead = false;
+    }
+}
+
+
+
+???Notification repo
+
+// src/main/java/com/scb/rwtoolbackend/repository/NotificationRepository.java
+package com.scb.rwtoolbackend.repository;
+
+import com.scb.rwtoolbackend.model.Notification;
+import com.scb.rwtoolbackend.model.Subscriber;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface NotificationRepository extends JpaRepository<Notification, Long> {
+    
+    // This will be useful for the frontend to show unread notifications
+    List<Notification> findBySubscriberAndIsReadFalseOrderByCreatedDateDesc(Subscriber subscriber);
+}
+
+
+
+???Notification service
+
+// src/main/java/com/scb/rwtoolbackend/service/NotificationService.java
+package com.scb.rwtoolbackend.service;
+
+import com.scb.rwtoolbackend.model.Notification;
+import com.scb.rwtoolbackend.model.Subscriber;
+import com.scb.rwtoolbackend.repository.NotificationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class NotificationService {
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    /**
+     * Creates and saves a new notification for a specific user.
+     * @param subscriber The user to notify.
+     * @param message The content of the notification.
+     */
+    public void createNotification(Subscriber subscriber, String message) {
+        if (subscriber == null || message == null || message.isBlank()) {
+            // Or throw an exception
+            return; 
+        }
+        Notification notification = new Notification(subscriber, message);
+        notificationRepository.save(notification);
+    }
+}
+
+
+???DistributorService
+
+// src/main/java/com/scb/rwtoolbackend/service/DistributorService.java
+
+// ... (other imports)
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+// Import your new service and the subscription repo/models
+import com.scb.rwtoolbackend.repository.SubscriptionRequestRepository;
+import com.scb.rwtoolbackend.repository.NotificationService;
+import com.scb.rwtoolbackend.model.SubscriptionRequest;
+import com.scb.rwtoolbackend.model.RequestStatus;
+import com.scb.rwtoolbackend.model.Subscriber;
+import com.scb.rwtoolbackend.model.ReportGroup;
+
+// Import your repositories for the file tables
+import com.scb.rwtoolbackend.repository.OpsFileRepository;
+import com.scb.rwtoolbackend.repository.FinanceFileRepository;
+import com.scb.rwtoolbackend.repository.ComplianceFileRepository;
+import com.scb.rwtoolbackend.repository.UploadedFileRepository; // <-- ASSUMPTION
+import com.scb.rwtoolbackend.model.UploadedFile; // <-- ASSUMPTION
+import com.scb.rwtoolbackend.model.OpsFile;
+import com.scb.rwtoolbackend.model.FinanceFile;
+import com.scb.rwtoolbackend.model.ComplianceFile;
+
+
+@Service
+public class DistributorService {
+
+    // Your existing repos
+    @Autowired private OpsFileRepository opsRepo;
+    @Autowired private FinanceFileRepository financeFileRepo;
+    @Autowired private ComplianceFileRepository complianceRepo;
+
+    // === NEWLY INJECTED REPOS & SERVICES ===
+    @Autowired
+    private SubscriptionRequestRepository subscriptionRequestRepo;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    // I'm assuming you have a repo for your "common table"
+    @Autowired 
+    private UploadedFileRepository uploadedFileRepo; 
+    // === END OF NEW INJECTIONS ===
+
+
+    /**
+     * Transfers a file from the common upload table to its specific table
+     * AND creates a notification if the user is subscribed.
+     */
+    @Transactional // Make this method transactional
+    public void transferFile(Long id) {
+        // 1. Find the file in the "common table"
+        // (Replace 'UploadedFile' with your actual entity name)
+        UploadedFile fileToTransfer = uploadedFileRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("File not found in common table with id: " + id));
+
+        // Get the key details *before* transferring
+        Subscriber subscriber = fileToTransfer.getSubscriber();
+        ReportGroup group = fileToTransfer.getReportGroup();
+        String fileName = fileToTransfer.getFileName();
+        
+        // 2. Perform the actual file transfer logic (your original code)
+        // This is just an example, adapt it to your logic
+        switch (group) {
+            case "OPS": // Assuming your enum names match
+                OpsFile opsFile = new OpsFile(fileName, fileToTransfer.getFilePath(), subscriber);
+                opsRepo.save(opsFile);
+                break;
+            case "FINANCE":
+                FinanceFile financeFile = new FinanceFile(fileName, fileToTransfer.getFilePath(), subscriber);
+                financeFileRepo.save(financeFile);
+                break;
+            case "COMPLIANCE":
+                ComplianceFile complianceFile = new ComplianceFile(fileName, fileToTransfer.getFilePath(), subscriber);
+                complianceRepo.save(complianceFile);
+                break;
+            default:
+                throw new RuntimeException("Invalid file type for transfer");
+        }
+
+        // 3. Delete the file from the common table
+        uploadedFileRepo.delete(fileToTransfer);
+
+        // --- 4. NEW NOTIFICATION LOGIC ---
+        // Check if the user has an APPROVED subscription for this group
+        // We use the 'findBySubscriberAndGroupAndStatus' method from your repository
+        Optional<SubscriptionRequest> subscription = subscriptionRequestRepo
+            .findBySubscriberAndGroupAndStatus(subscriber, group, RequestStatus.APPROVED);
+
+        if (subscription.isPresent()) {
+            // User is subscribed! Create a notification.
+            String message = "A new report '" + fileName + "' is now available.";
+            
+            notificationService.createNotification(subscriber, message);
+        }
+        // If no subscription is found, we simply do nothing.
+    }
+    
+    // ... (your existing downloadFile and downloadFilesAsZip methods) ...
+}
