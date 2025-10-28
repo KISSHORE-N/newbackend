@@ -1,0 +1,133 @@
+// Import this
+import java.util.List;
+
+// ... inside your Controller class
+
+/**
+ * Handles downloading multiple files of a specific type as a single ZIP archive.
+ * Example URL: /api/download/zip/ops?ids=1,2,3
+ */
+@GetMapping("/download/zip/{type}")
+public ResponseEntity<Resource> downloadFilesAsZip(
+        @PathVariable String type,
+        @RequestParam List<Long> ids) throws IOException {
+    
+    return distributorService.downloadFilesAsZip(type, ids);
+}
+
+// Your existing single file download method
+@GetMapping("/download/{type}/{id}")
+public ResponseEntity<Resource> downloadFile(@PathVariable String type, @PathVariable Long id) throws IOException {
+    return distributorService.downloadFile(type, id);
+}
+
+
+
+
+??? FROM HERE IT IS SERVICE PART
+
+// Add these imports
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+
+// ... inside your DistributoService class
+
+/**
+ * Downloads a single file. (Your existing method)
+ */
+public ResponseEntity<Resource> downloadFile(String type, Long id) throws IOException {
+    // ... your existing code ...
+}
+
+/**
+ * Compiles multiple files of a given type into a single ZIP archive and returns it.
+ */
+public ResponseEntity<Resource> downloadFilesAsZip(String type, List<Long> ids) throws IOException {
+
+    // 1. Helper class to store file info temporarily
+    // (You can also make this a private record or a static nested class)
+    class FileDetail {
+        private final String filePath;
+        private final String fileName;
+        
+        FileDetail(String filePath, String fileName) {
+            this.filePath = filePath;
+            this.fileName = fileName;
+        }
+        // getters
+        public String getFilePath() { return filePath; }
+        public String getFileName() { return fileName; }
+    }
+
+    // 2. Gather all file details
+    List<FileDetail> fileDetails = new ArrayList<>();
+    switch (type.toLowerCase()) {
+        case "ops":
+            // Use findAllById to fetch all entities at once
+            opsRepo.findAllById(ids)
+                   .forEach(file -> fileDetails.add(new FileDetail(file.getFilePath(), file.getFileName())));
+            break;
+        case "finance":
+            financeFileRepo.findAllById(ids)
+                           .forEach(file -> fileDetails.add(new FileDetail(file.getFilePath(), file.getFileName())));
+            break;
+        case "compliance":
+            complianceRepo.findAllById(ids)
+                          .forEach(file -> fileDetails.add(new FileDetail(file.getFilePath(), file.getFileName())));
+            break;
+        default:
+            throw new RuntimeException("Invalid file type");
+    }
+
+    if (fileDetails.isEmpty()) {
+        // Or return ResponseEntity.notFound().build();
+        throw new RuntimeException("No files found for the given IDs and type.");
+    }
+
+    // 3. Create ZIP file in memory
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+        
+        for (FileDetail detail : fileDetails) {
+            Path path = Paths.get(detail.getFilePath());
+            Resource resource = new UrlResource(path.toUri());
+
+            if (!resource.exists() || !resource.isReadable()) {
+                // Log a warning or skip this file
+                System.err.println("Skipping file (not found or not readable): " + detail.getFilePath());
+                continue; 
+            }
+
+            // Create a new entry in the ZIP file
+            ZipEntry zipEntry = new ZipEntry(detail.getFileName());
+            zos.putNextEntry(zipEntry);
+
+            // Write the file's content into the ZIP stream
+            Files.copy(path, zos);
+
+            // Close the current entry
+            zos.closeEntry();
+        }
+    } // try-with-resources automatically closes zos
+
+    // 4. Prepare and return the response
+    byte[] zipBytes = baos.toByteArray();
+    Resource zipResource = new ByteArrayResource(zipBytes);
+    
+    String zipFileName = type + "_files.zip";
+
+    return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_OCTET_STREAM) // Use application/zip or octet-stream
+            .contentLength(zipBytes.length)
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + zipFileName + "\"")
+            .body(zipResource);
+}
